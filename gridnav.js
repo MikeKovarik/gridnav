@@ -13,18 +13,18 @@ const DOWN = 'down'
 const VERTICAL = 'vertical'
 const HORIZONTAL = 'horizontal'
 
-const getAxis = direction => direction === UP || direction === DOWN ? VERTICAL : HORIZONTAL
-
 export const isArrowKey = ({keyCode}) => keyCode >= 37 && keyCode <= 40
 
-const translateKeyToDirection = e => {
-	switch (e.keyCode) {			
-		case KEYS.LEFT:  return LEFT
-		case KEYS.RIGHT: return RIGHT
-		case KEYS.UP:    return UP
-		case KEYS.DOWN:  return DOWN
-	}
+const sortAndFilter = (targets, key, sorter) => {
+	const sorted = targets.sort(sorter(key))
+	const lowest = sorted[0]
+	return lowest ? sorted.filter(target => target[key] === lowest[key]) : sorted
 }
+
+const sortAndGetLowest  = (...args) => sortAndFilter(...args, key => (a, b) => a[key] - b[key])
+const sortAndGetHighest = (...args) => sortAndFilter(...args, key => (a, b) => b[key] - a[key])
+
+const clamp = (val, min, max) => Math.min(Math.max(val, min), max)
 
 class NodePos {
 
@@ -40,19 +40,26 @@ class NodePos {
 
 }
 
-const sortLowestToHighest = key => (a, b) => a[key] - b[key]
-const sortHighestToLowest = key => (a, b) => b[key] - a[key]
+class Overlap {
 
-const sortAndFilter = (targets, key, sorter) => {
-	const sorted = targets.sort(sorter(key))
-	const lowest = sorted[0]
-	return lowest ? sorted.filter(target => target[key] === lowest[key]) : sorted
+	constructor(target, source, lowerSide, upperSide, sizeKey) {
+		// how much size of target's total size is shared with 'source'
+		const overlapSelfSize = this.calculateOverlap(source, target, lowerSide, upperSide, sizeKey)
+		// how much size of 'source' is shared with the 'target'. (is target inside source)
+		const overlapCurrentSize = this.calculateOverlap(target, source, lowerSide, upperSide, sizeKey)
+		return {...target, overlapSelfSize, overlapCurrentSize}
+	}
+
+	calculateOverlap(target, source, lowerSide, upperSide, sizeKey) {
+		const lowerDiff = target[lowerSide] - source[lowerSide]
+		const upperDiff = target[upperSide] - source[lowerSide]
+		const lowerClamped = clamp(lowerDiff, 0, source[sizeKey])
+		const upperClamped = clamp(upperDiff, 0, source[sizeKey])
+		const ratio = (upperClamped - lowerClamped) / source[sizeKey]
+		return Math.round(ratio * 100)
+	}
+
 }
-
-const sortAndGetLowest = (...args) => sortAndFilter(...args, sortLowestToHighest)
-const sortAndGetHighest = (...args) => sortAndFilter(...args, sortHighestToLowest)
-
-const clamp = (val, min, max) => Math.min(Math.max(val, min), max)
 
 export class GridNav {
 
@@ -90,9 +97,22 @@ export class GridNav {
 	setupDirectionAndAxis(eventOrDirection) {
 		this.direction = typeof eventOrDirection === 'string'
 						? eventOrDirection
-						: translateKeyToDirection(eventOrDirection)
-		this.axis = getAxis(this.direction)
+						: this.translateKeyToDirection(eventOrDirection)
+		this.axis = this.getAxis(this.direction)
 		this.directionEdges = this.getDirectionEdges(this.direction)
+	}
+
+	translateKeyToDirection = e => {
+		switch (e.keyCode) {			
+			case KEYS.LEFT:  return LEFT
+			case KEYS.RIGHT: return RIGHT
+			case KEYS.UP:    return UP
+			case KEYS.DOWN:  return DOWN
+		}
+	}
+
+	getAxis(direction) {
+		return direction === UP || direction === DOWN ? VERTICAL : HORIZONTAL
 	}
 
 	getDirectionEdges(direction) {
@@ -121,29 +141,9 @@ export class GridNav {
 		return sortAndGetLowest(targets, 'mainEdgeDist')
 	}
 
-	calculateOverlap(target, source, lowerSide, upperSide, sizeKey) {
-		let lowerDiff = target[lowerSide] - source[lowerSide]
-		let upperDiff = target[upperSide] - source[lowerSide]
-		let lowerClamped = clamp(lowerDiff, 0, source[sizeKey])
-		let upperClamped = clamp(upperDiff, 0, source[sizeKey])
-		let ratio = (upperClamped - lowerClamped) / source[sizeKey]
-		return Math.round(ratio * 100)
-	}
-
-	calculateOverlaps(targets, source) {
-		const [, , lowerSide, upperSide, sizeKey] = this.directionEdges
-
-		return targets.map(target => {
-			// how much size of target's total size is shared with 'source'
-			const overlapSelfSize = this.calculateOverlap(source, target, lowerSide, upperSide, sizeKey)
-			// how much size of 'source' is shared with the 'target'. (is target inside source)
-			const overlapCurrentSize = this.calculateOverlap(target, source, lowerSide, upperSide, sizeKey)
-			return {...target, overlapSelfSize, overlapCurrentSize}
-		})
-	}
-
 	filterOverlaping(targets, source, history) {
-		let overlapingItems = this.calculateOverlaps(targets, source)
+		const [, , lowerSide, upperSide, sizeKey] = this.directionEdges
+		let overlapingItems = targets.map(target => new Overlap(target, source, lowerSide, upperSide, sizeKey))
 
 		overlapingItems = overlapingItems.filter(target => target.overlapSelfSize > 0)
 		overlapingItems = sortAndGetHighest(overlapingItems, 'overlapSelfSize')
