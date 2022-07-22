@@ -26,18 +26,27 @@ const translateKeyToDirection = e => {
 	}
 }
 
-const calculateNodePosition = node => {
-	const {left, right, top, bottom, width, height} = node.getBoundingClientRect()
-	return {left, right, top, bottom, width, height, node}
+class NodePos {
+
+	static from(node) {
+		return new NodePos(node)
+	}
+
+	constructor(node) {
+		this.node = node
+		const {left, right, top, bottom, width, height} = node.getBoundingClientRect()
+		Object.assign(this, {left, right, top, bottom, width, height})
+	}
+
 }
 
 const sortLowestToHighest = key => (a, b) => a[key] - b[key]
 const sortHighestToLowest = key => (a, b) => b[key] - a[key]
 
-const sortAndFilter = (candidates, key, sorter) => {
-	const sorted = candidates.sort(sorter(key))
+const sortAndFilter = (targets, key, sorter) => {
+	const sorted = targets.sort(sorter(key))
 	const lowest = sorted[0]
-	return lowest ? sorted.filter(item => item[key] === lowest[key]) : sorted
+	return lowest ? sorted.filter(target => target[key] === lowest[key]) : sorted
 }
 
 const sortAndGetLowest = (...args) => sortAndFilter(...args, sortLowestToHighest)
@@ -52,10 +61,6 @@ export class GridNav {
 	lastDirection
 	lastAxis
 
-	calculateNodes(nodes) {
-		return Array.from(nodes).map(calculateNodePosition)
-	}
-
 	findNext = (focusableNodes, currentNode, eventOrDirection) => {
 		this.setupDirectionAndAxis(eventOrDirection)
 
@@ -64,8 +69,8 @@ export class GridNav {
 		focusableNodes = new Set(focusableNodes)
 		focusableNodes.delete(currentNode)
 
-		const source = calculateNodePosition(document.activeElement)
-		let targets = this.calculateNodes(focusableNodes)
+		const source = NodePos.from(document.activeElement)
+		let targets = Array.from(focusableNodes).map(NodePos.from)
 
 		targets = this.filterByDirection(targets, source)
 
@@ -99,21 +104,21 @@ export class GridNav {
 
 	filterByDirection(targets, source) {
 		const {direction} = this
-		if (direction === RIGHT) return targets.filter(item => item.left >= source.right)
-		if (direction === LEFT)  return targets.filter(item => item.right <= source.left)
-		if (direction === DOWN)  return targets.filter(item => item.top >= source.bottom)
-		if (direction === UP)    return targets.filter(item => item.bottom <= source.top)
+		if (direction === RIGHT) return targets.filter(target => target.left >= source.right)
+		if (direction === LEFT)  return targets.filter(target => target.right <= source.left)
+		if (direction === DOWN)  return targets.filter(target => target.top >= source.bottom)
+		if (direction === UP)    return targets.filter(target => target.bottom <= source.top)
 	}
 
-	filterByClosestParallel(candidates, current) {
+	filterByClosestParallel(targets, source) {
 		const [mainEdgeCurrent, mainEdgeNeighbour] = this.directionEdges
 
-		candidates.forEach(item => {
-			const rawDist = current[mainEdgeCurrent] - item[mainEdgeNeighbour]
-			item.mainEdgeDist = Math.round(Math.abs(rawDist))
-		})
+		for (let target of targets) {
+			const rawDist = source[mainEdgeCurrent] - target[mainEdgeNeighbour]
+			target.mainEdgeDist = Math.round(Math.abs(rawDist))
+		}
 
-		return sortAndGetLowest(candidates, 'mainEdgeDist')
+		return sortAndGetLowest(targets, 'mainEdgeDist')
 	}
 
 	calculateOverlap(target, source, lowerSide, upperSide, sizeKey) {
@@ -125,22 +130,22 @@ export class GridNav {
 		return Math.round(ratio * 100)
 	}
 
-	calculateOverlaps(targets, current) {
+	calculateOverlaps(targets, source) {
 		const [, , lowerSide, upperSide, sizeKey] = this.directionEdges
 
-		return targets.map(item => {
-			// how much size of item's total size is shared with 'current'
-			const overlapSelfSize = this.calculateOverlap(current, item, lowerSide, upperSide, sizeKey)
-			// how much size of 'current' is shared with the 'item'. (is item inside current)
-			const overlapCurrentSize = this.calculateOverlap(item, current, lowerSide, upperSide, sizeKey)
-			return {...item, overlapSelfSize, overlapCurrentSize}
+		return targets.map(target => {
+			// how much size of target's total size is shared with 'source'
+			const overlapSelfSize = this.calculateOverlap(source, target, lowerSide, upperSide, sizeKey)
+			// how much size of 'source' is shared with the 'target'. (is target inside source)
+			const overlapCurrentSize = this.calculateOverlap(target, source, lowerSide, upperSide, sizeKey)
+			return {...target, overlapSelfSize, overlapCurrentSize}
 		})
 	}
 
-	filterOverlaping(targets, current, history) {
-		let overlapingItems = this.calculateOverlaps(targets, current)
+	filterOverlaping(targets, source, history) {
+		let overlapingItems = this.calculateOverlaps(targets, source)
 
-		overlapingItems = overlapingItems.filter(item => item.overlapSelfSize > 0)
+		overlapingItems = overlapingItems.filter(target => target.overlapSelfSize > 0)
 		overlapingItems = sortAndGetHighest(overlapingItems, 'overlapSelfSize')
 
 		// HERE SHOULD BE HISTORY CHECK
@@ -149,7 +154,7 @@ export class GridNav {
 			overlapingItems = this.filterOverlaping(overlapingItems, last, newHistory)
 		}
 
-		overlapingItems = overlapingItems.filter(item => item.overlapCurrentSize > 0)
+		overlapingItems = overlapingItems.filter(target => target.overlapCurrentSize > 0)
 		overlapingItems = sortAndGetHighest(overlapingItems, 'overlapCurrentSize')
 
 		return overlapingItems.length ? overlapingItems : targets
