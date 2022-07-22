@@ -65,27 +65,6 @@ const sortByMainEdge = (candidates, current, directionEdges) => {
 	return sortAndGetLowest(candidates, 'mainEdgeDist')
 }
 
-const sortBySecondaryEdge = (candidates, current, directionEdges) => {
-	const [, , side1, side2] = directionEdges
-
-	const aligned = candidates.filter(item => {
-		return item[side1] === current[side1]
-			|| item[side2] === current[side2]
-	})
-
-	return aligned.length > 0 ? aligned : candidates
-}
-
-const sortByCenter = (candidates, current) => {
-	candidates.map(item => {
-		const x = Math.abs(current.centerX - item.centerX)
-		const y = Math.abs(current.centerY - item.centerY)
-		item.centerDistance = Math.round(Math.sqrt(x * x + y * y))
-	})
-
-	return sortAndGetLowest(candidates, 'centerDistance')
-}
-
 const clamp = (val, min, max) => Math.min(Math.max(val, min), max)
 
 export class GridNav {
@@ -95,22 +74,14 @@ export class GridNav {
 	lastDirection
 	lastAxis
 
-	constructor() {
-		//document.addEventListener('click', this.reset)
-		//document.addEventListener('blur', this.reset)
-	}
-
 	calculateNodes(nodes) {
 		return this.targets = Array.from(nodes).map(calculateNodePosition)
 	}
 
 	findNext = (focusableNodes, currentNode, eventOrDirection) => {
-		const direction = typeof eventOrDirection === 'string'
-						? eventOrDirection
-						: translateKeyToDirection(eventOrDirection)
-		const axis = getAxis(direction)
+		this.setupDirectionAndAxis(eventOrDirection)
 
-		if (this.lastAxis !== axis) this.reset()
+		if (this.lastAxis !== this.axis) this.reset()
 
 		focusableNodes = new Set(focusableNodes)
 		focusableNodes.delete(currentNode)
@@ -118,15 +89,8 @@ export class GridNav {
 		this.current = calculateNodePosition(document.activeElement)
 		this.filtered = this.calculateNodes(focusableNodes)
 
-		if (direction === RIGHT) this.filtered = this.filtered.filter(item => item.left >= this.current.right)
-		if (direction === LEFT)  this.filtered = this.filtered.filter(item => item.right <= this.current.left)
-		if (direction === DOWN)  this.filtered = this.filtered.filter(item => item.top >= this.current.bottom)
-		if (direction === UP)    this.filtered = this.filtered.filter(item => item.bottom <= this.current.top)
 
-		if (direction === RIGHT) this.directionEdges = ['right', 'left', 'top', 'bottom', 'height']
-		if (direction === LEFT)  this.directionEdges = ['left', 'right', 'top', 'bottom', 'height']
-		if (direction === DOWN)  this.directionEdges = ['bottom', 'top', 'left', 'right', 'width']
-		if (direction === UP)    this.directionEdges = ['top', 'bottom', 'left', 'right', 'width']
+		this.findDirection()
 
 		this.filtered = sortByMainEdge(this.filtered, this.current, this.directionEdges)
 
@@ -135,11 +99,36 @@ export class GridNav {
 
 		const [target] = this.filtered
 
-		this.lastAxis = axis
+		this.lastAxis = this.axis
 		this.axisHistory.unshift(this.current)
 		while (this.axisHistory.length >= this.maxHistory) this.axisHistory.pop()
 
 		return target
+	}
+
+	setupDirectionAndAxis(eventOrDirection) {
+		this.direction = typeof eventOrDirection === 'string'
+						? eventOrDirection
+						: translateKeyToDirection(eventOrDirection)
+		this.axis = getAxis(this.direction)
+		this.directionEdges = this.getDirectionEdges(this.direction)
+	}
+
+	findDirection() {
+		const {direction} = this
+
+		if (direction === RIGHT) this.filtered = this.filtered.filter(item => item.left >= this.current.right)
+		if (direction === LEFT)  this.filtered = this.filtered.filter(item => item.right <= this.current.left)
+		if (direction === DOWN)  this.filtered = this.filtered.filter(item => item.top >= this.current.bottom)
+		if (direction === UP)    this.filtered = this.filtered.filter(item => item.bottom <= this.current.top)
+
+	}
+
+	getDirectionEdges(direction) {
+		if (direction === RIGHT) return ['right', 'left', 'top', 'bottom', 'height']
+		if (direction === LEFT)  return ['left', 'right', 'top', 'bottom', 'height']
+		if (direction === DOWN)  return ['bottom', 'top', 'left', 'right', 'width']
+		if (direction === UP)    return ['top', 'bottom', 'left', 'right', 'width']
 	}
 
 	filterOverlaping(items, current, history) {
@@ -173,7 +162,7 @@ export class GridNav {
 		return overlapingItems.length ? overlapingItems : items
 	}
 
-	reset = (direction) => {
+	reset(direction) {
 		this.axisHistory = []
 		this.lastDirection = direction
 	}
