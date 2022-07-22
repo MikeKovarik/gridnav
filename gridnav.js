@@ -42,17 +42,6 @@ const calculateOverlap = (target, source, lowerSide, upperSide, sizeKey) => {
 	return Math.round(ratio * 100)
 }
 
-const calculateOverlaps = (filtered, current, directionEdges) => {
-	const [, , lowerSide, upperSide, sizeKey] = directionEdges
-
-	for (let item of filtered) {
-		// how much size of item's total size is shared with 'current'
-		item.overlapSelfSize  = calculateOverlap(current, item, lowerSide, upperSide, sizeKey)
-		// how much size of 'current' is shared with the 'item'. (is item inside current)
-		item.overlapCurrentSize = calculateOverlap(item, current, lowerSide, upperSide, sizeKey)
-	}
-}
-
 const sortLowestToHighest = key => (a, b) => a[key] - b[key]
 const sortHighestToLowest = key => (a, b) => b[key] - a[key]
 
@@ -126,78 +115,60 @@ export class GridNav {
 		focusableNodes = new Set(focusableNodes)
 		focusableNodes.delete(currentNode)
 
-		let current = calculateNodePosition(document.activeElement)
-		let filtered = this.calculateNodes(focusableNodes)
-		let directionEdges
+		this.current = calculateNodePosition(document.activeElement)
+		this.filtered = this.calculateNodes(focusableNodes)
 
-		if (direction === RIGHT) filtered = filtered.filter(item => item.left >= current.right)
-		if (direction === LEFT)  filtered = filtered.filter(item => item.right <= current.left)
-		if (direction === DOWN)  filtered = filtered.filter(item => item.top >= current.bottom)
-		if (direction === UP)    filtered = filtered.filter(item => item.bottom <= current.top)
+		if (direction === RIGHT) this.filtered = this.filtered.filter(item => item.left >= this.current.right)
+		if (direction === LEFT)  this.filtered = this.filtered.filter(item => item.right <= this.current.left)
+		if (direction === DOWN)  this.filtered = this.filtered.filter(item => item.top >= this.current.bottom)
+		if (direction === UP)    this.filtered = this.filtered.filter(item => item.bottom <= this.current.top)
 
-		if (direction === RIGHT) directionEdges = ['right', 'left', 'top', 'bottom', 'height']
-		if (direction === LEFT)  directionEdges = ['left', 'right', 'top', 'bottom', 'height']
-		if (direction === DOWN)  directionEdges = ['bottom', 'top', 'left', 'right', 'width']
-		if (direction === UP)    directionEdges = ['top', 'bottom', 'left', 'right', 'width']
+		if (direction === RIGHT) this.directionEdges = ['right', 'left', 'top', 'bottom', 'height']
+		if (direction === LEFT)  this.directionEdges = ['left', 'right', 'top', 'bottom', 'height']
+		if (direction === DOWN)  this.directionEdges = ['bottom', 'top', 'left', 'right', 'width']
+		if (direction === UP)    this.directionEdges = ['top', 'bottom', 'left', 'right', 'width']
 
-		filtered = sortByMainEdge(filtered, current, directionEdges)
-        console.log('filtered A', filtered)
-		//filtered = sortBySecondaryEdge(filtered, current, directionEdges)
+		this.filtered = sortByMainEdge(this.filtered, this.current, this.directionEdges)
 
-		this.axisHistory.push(current)
-		while (this.axisHistory.length >= this.maxHistory) this.axisHistory.shift()
+		if (this.filtered.length > 1)
+			this.filtered = this.filterOverlaping(this.filtered, this.current, this.axisHistory)
 
-		const vertical = direction === UP || direction === DOWN
-		const horizontal = !vertical
-
-		console.log('vertical', vertical, 'horizontal', horizontal)
-		console.log('current', current.centerX, current.centerY)
-
-        console.log('filtered B', filtered)
-
-		if (filtered.length > 1) {
-			filtered = this.filterOverlaping(filtered, current, directionEdges)
-		}
-
-		console.log('filtered C', filtered)
-
-/*
-		let history = [...this.axisHistory]
-		while (filtered.length > 1 && history.length) {
-			console.log('-'.repeat(30))
-			let item = history.shift()
-            console.log('node', item.node)
-			const centerX = vertical   ? item.centerX : current.centerX
-			const centerY = horizontal ? item.centerY : current.centerY
-            console.log('x', centerX, '| item', item.centerX, 'current', current.centerX)
-            console.log('y', centerY, '| item', item.centerY, 'current', current.centerY)
-			filtered = sortByCenter(filtered, {centerX, centerY})
-		}
-		//if (filtered.length > 1) filtered = sortByCenter(filtered, current)
-		//if (filtered.length > 1) console.log('ještě furt', this.axisHistory)
-		console.log('filtered B', filtered)
-*/
-
-
-		const target = filtered[0]
+		const [target] = this.filtered
 
 		this.lastAxis = axis
+		this.axisHistory.unshift(this.current)
+		while (this.axisHistory.length >= this.maxHistory) this.axisHistory.pop()
 
 		return target
 	}
 
-	filterOverlaping(items, current, directionEdges) {
-		calculateOverlaps(items, current, directionEdges)
+	filterOverlaping(items, current, history) {
+		const {directionEdges} = this
 
-		let overlapingItems = items.filter(item => item.overlapSelfSize > 0)
+		const calculateOverlaps = (filtered, current, directionEdges) => {
+			const [, , lowerSide, upperSide, sizeKey] = directionEdges
+			return filtered.map(item => {
+				// how much size of item's total size is shared with 'current'
+				const overlapSelfSize  = calculateOverlap(current, item, lowerSide, upperSide, sizeKey)
+				// how much size of 'current' is shared with the 'item'. (is item inside current)
+				const overlapCurrentSize = calculateOverlap(item, current, lowerSide, upperSide, sizeKey)
+				return {...item, overlapSelfSize, overlapCurrentSize}
+			})
+		}
+
+		let overlapingItems = calculateOverlaps(items, current, directionEdges)
+
+		overlapingItems = overlapingItems.filter(item => item.overlapSelfSize > 0)
 		overlapingItems = sortAndGetHighest(overlapingItems, 'overlapSelfSize')
-        console.log('~ overlapingItems', overlapingItems)
 
 		// HERE SHOULD BE HISTORY CHECK
+		if (overlapingItems.length > 1 && history.length) {
+			let [last, ...newHistory] = history
+			overlapingItems = this.filterOverlaping(overlapingItems, last, newHistory)
+		}
 
 		overlapingItems = overlapingItems.filter(item => item.overlapCurrentSize > 0)
 		overlapingItems = sortAndGetHighest(overlapingItems, 'overlapCurrentSize')
-        console.log('~ overlapingItems', overlapingItems)
 
 		return overlapingItems.length ? overlapingItems : items
 	}
