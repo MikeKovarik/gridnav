@@ -28,9 +28,7 @@ const translateKeyToDirection = e => {
 
 const calculateNodePosition = node => {
 	const {left, right, top, bottom, width, height} = node.getBoundingClientRect()
-	const centerX = left + (width / 2)
-	const centerY = top + (height / 2)
-	return {left, right, top, bottom, width, height, node, centerX, centerY}
+	return {left, right, top, bottom, width, height, node}
 }
 
 const calculateOverlap = (target, source, lowerSide, upperSide, sizeKey) => {
