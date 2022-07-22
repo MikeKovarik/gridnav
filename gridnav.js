@@ -31,15 +31,6 @@ const calculateNodePosition = node => {
 	return {left, right, top, bottom, width, height, node}
 }
 
-const calculateOverlap = (target, source, lowerSide, upperSide, sizeKey) => {
-	let lowerDiff = target[lowerSide] - source[lowerSide]
-	let upperDiff = target[upperSide] - source[lowerSide]
-	let lowerClamped = clamp(lowerDiff, 0, source[sizeKey])
-	let upperClamped = clamp(upperDiff, 0, source[sizeKey])
-	let ratio = (upperClamped - lowerClamped) / source[sizeKey]
-	return Math.round(ratio * 100)
-}
-
 const sortLowestToHighest = key => (a, b) => a[key] - b[key]
 const sortHighestToLowest = key => (a, b) => b[key] - a[key]
 
@@ -52,17 +43,6 @@ const sortAndFilter = (candidates, key, sorter) => {
 const sortAndGetLowest = (...args) => sortAndFilter(...args, sortLowestToHighest)
 const sortAndGetHighest = (...args) => sortAndFilter(...args, sortHighestToLowest)
 
-const sortByMainEdge = (candidates, current, directionEdges) => {
-	const [mainEdgeCurrent, mainEdgeNeighbour] = directionEdges
-
-	candidates.forEach(item => {
-		const rawDist = current[mainEdgeCurrent] - item[mainEdgeNeighbour]
-		item.mainEdgeDist = Math.round(Math.abs(rawDist))
-	})
-
-	return sortAndGetLowest(candidates, 'mainEdgeDist')
-}
-
 const clamp = (val, min, max) => Math.min(Math.max(val, min), max)
 
 export class GridNav {
@@ -73,7 +53,7 @@ export class GridNav {
 	lastAxis
 
 	calculateNodes(nodes) {
-		return this.targets = Array.from(nodes).map(calculateNodePosition)
+		return Array.from(nodes).map(calculateNodePosition)
 	}
 
 	findNext = (focusableNodes, currentNode, eventOrDirection) => {
@@ -84,24 +64,22 @@ export class GridNav {
 		focusableNodes = new Set(focusableNodes)
 		focusableNodes.delete(currentNode)
 
-		this.current = calculateNodePosition(document.activeElement)
-		this.filtered = this.calculateNodes(focusableNodes)
+		const source = calculateNodePosition(document.activeElement)
+		let targets = this.calculateNodes(focusableNodes)
 
+		targets = this.filterByDirection(targets, source)
 
-		this.findDirection()
+		if (targets.length > 1)
+			targets = this.filterByClosestParallel(targets, source)
 
-		this.filtered = sortByMainEdge(this.filtered, this.current, this.directionEdges)
-
-		if (this.filtered.length > 1)
-			this.filtered = this.filterOverlaping(this.filtered, this.current, this.axisHistory)
-
-		const [target] = this.filtered
+		if (targets.length > 1)
+			targets = this.filterOverlaping(targets, source, this.axisHistory)
 
 		this.lastAxis = this.axis
-		this.axisHistory.unshift(this.current)
+		this.axisHistory.unshift(source)
 		while (this.axisHistory.length >= this.maxHistory) this.axisHistory.pop()
 
-		return target
+		return targets[0]
 	}
 
 	setupDirectionAndAxis(eventOrDirection) {
@@ -112,16 +90,6 @@ export class GridNav {
 		this.directionEdges = this.getDirectionEdges(this.direction)
 	}
 
-	findDirection() {
-		const {direction} = this
-
-		if (direction === RIGHT) this.filtered = this.filtered.filter(item => item.left >= this.current.right)
-		if (direction === LEFT)  this.filtered = this.filtered.filter(item => item.right <= this.current.left)
-		if (direction === DOWN)  this.filtered = this.filtered.filter(item => item.top >= this.current.bottom)
-		if (direction === UP)    this.filtered = this.filtered.filter(item => item.bottom <= this.current.top)
-
-	}
-
 	getDirectionEdges(direction) {
 		if (direction === RIGHT) return ['right', 'left', 'top', 'bottom', 'height']
 		if (direction === LEFT)  return ['left', 'right', 'top', 'bottom', 'height']
@@ -129,21 +97,48 @@ export class GridNav {
 		if (direction === UP)    return ['top', 'bottom', 'left', 'right', 'width']
 	}
 
-	filterOverlaping(items, current, history) {
-		const {directionEdges} = this
+	filterByDirection(targets, source) {
+		const {direction} = this
+		if (direction === RIGHT) return targets.filter(item => item.left >= source.right)
+		if (direction === LEFT)  return targets.filter(item => item.right <= source.left)
+		if (direction === DOWN)  return targets.filter(item => item.top >= source.bottom)
+		if (direction === UP)    return targets.filter(item => item.bottom <= source.top)
+	}
 
-		const calculateOverlaps = (filtered, current, directionEdges) => {
-			const [, , lowerSide, upperSide, sizeKey] = directionEdges
-			return filtered.map(item => {
-				// how much size of item's total size is shared with 'current'
-				const overlapSelfSize  = calculateOverlap(current, item, lowerSide, upperSide, sizeKey)
-				// how much size of 'current' is shared with the 'item'. (is item inside current)
-				const overlapCurrentSize = calculateOverlap(item, current, lowerSide, upperSide, sizeKey)
-				return {...item, overlapSelfSize, overlapCurrentSize}
-			})
-		}
+	filterByClosestParallel(candidates, current) {
+		const [mainEdgeCurrent, mainEdgeNeighbour] = this.directionEdges
 
-		let overlapingItems = calculateOverlaps(items, current, directionEdges)
+		candidates.forEach(item => {
+			const rawDist = current[mainEdgeCurrent] - item[mainEdgeNeighbour]
+			item.mainEdgeDist = Math.round(Math.abs(rawDist))
+		})
+
+		return sortAndGetLowest(candidates, 'mainEdgeDist')
+	}
+
+	calculateOverlap(target, source, lowerSide, upperSide, sizeKey) {
+		let lowerDiff = target[lowerSide] - source[lowerSide]
+		let upperDiff = target[upperSide] - source[lowerSide]
+		let lowerClamped = clamp(lowerDiff, 0, source[sizeKey])
+		let upperClamped = clamp(upperDiff, 0, source[sizeKey])
+		let ratio = (upperClamped - lowerClamped) / source[sizeKey]
+		return Math.round(ratio * 100)
+	}
+
+	calculateOverlaps(targets, current) {
+		const [, , lowerSide, upperSide, sizeKey] = this.directionEdges
+
+		return targets.map(item => {
+			// how much size of item's total size is shared with 'current'
+			const overlapSelfSize = this.calculateOverlap(current, item, lowerSide, upperSide, sizeKey)
+			// how much size of 'current' is shared with the 'item'. (is item inside current)
+			const overlapCurrentSize = this.calculateOverlap(item, current, lowerSide, upperSide, sizeKey)
+			return {...item, overlapSelfSize, overlapCurrentSize}
+		})
+	}
+
+	filterOverlaping(targets, current, history) {
+		let overlapingItems = this.calculateOverlaps(targets, current)
 
 		overlapingItems = overlapingItems.filter(item => item.overlapSelfSize > 0)
 		overlapingItems = sortAndGetHighest(overlapingItems, 'overlapSelfSize')
@@ -157,7 +152,7 @@ export class GridNav {
 		overlapingItems = overlapingItems.filter(item => item.overlapCurrentSize > 0)
 		overlapingItems = sortAndGetHighest(overlapingItems, 'overlapCurrentSize')
 
-		return overlapingItems.length ? overlapingItems : items
+		return overlapingItems.length ? overlapingItems : targets
 	}
 
 	reset(direction) {
