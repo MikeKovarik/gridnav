@@ -65,7 +65,6 @@ export class GridNav {
 
 	maxHistory = 5
 	axisHistory = []
-	lastDirection
 	lastAxis
 
 	findNext = (focusableNodes, currentNode, eventOrDirection) => {
@@ -162,7 +161,6 @@ export class GridNav {
 
 	reset(direction) {
 		this.axisHistory = []
-		this.lastDirection = direction
 	}
 
 }
