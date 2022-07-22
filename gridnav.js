@@ -1,17 +1,28 @@
-const KEYS = {
-	LEFT: 37,
-	UP: 38,
+export const KEY = {
+	LEFT:  37,
+	UP:    38,
 	RIGHT: 39,
-	DOWN: 40,
+	DOWN:  40,
 }
 
-const LEFT = 'left'
-const UP = 'up'
-const RIGHT = 'right'
-const DOWN = 'down'
+export const DIRECTION = {
+	LEFT:  'left',
+	UP:    'up',
+	RIGHT: 'right',
+	DOWN:  'down',
+}
 
-const VERTICAL = 'vertical'
-const HORIZONTAL = 'horizontal'
+export const EDGES = {
+	RIGHT: ['right', 'left', 'top', 'bottom', 'height'],
+	LEFT:  ['left', 'right', 'top', 'bottom', 'height'],
+	DOWN:  ['bottom', 'top', 'left', 'right', 'width'],
+	UP:    ['top', 'bottom', 'left', 'right', 'width'],
+}
+
+export const AXIS = {
+	VERTICAL:   'vertical',
+	HORIZONTAL: 'horizontal',
+}
 
 export const isArrowKey = ({keyCode}) => keyCode >= 37 && keyCode <= 40
 
@@ -70,7 +81,7 @@ export class GridNav {
 	findNext = (focusableNodes, currentNode, eventOrDirection) => {
 		this.setupDirectionAndAxis(eventOrDirection)
 
-		if (this.lastAxis !== this.axis) this.reset()
+		if (this.lastAxis && this.lastAxis !== this.axis) this.reset()
 
 		focusableNodes = new Set(focusableNodes)
 		focusableNodes.delete(currentNode)
@@ -93,6 +104,10 @@ export class GridNav {
 		return targets[0]
 	}
 
+	reset() {
+		this.axisHistory = []
+	}
+
 	setupDirectionAndAxis(eventOrDirection) {
 		this.direction = typeof eventOrDirection === 'string'
 						? eventOrDirection
@@ -103,30 +118,33 @@ export class GridNav {
 
 	translateKeyToDirection = e => {
 		switch (e.keyCode) {			
-			case KEYS.LEFT:  return LEFT
-			case KEYS.RIGHT: return RIGHT
-			case KEYS.UP:    return UP
-			case KEYS.DOWN:  return DOWN
+			case KEY.LEFT:  return DIRECTION.LEFT
+			case KEY.RIGHT: return DIRECTION.RIGHT
+			case KEY.UP:    return DIRECTION.UP
+			case KEY.DOWN:  return DIRECTION.DOWN
 		}
 	}
 
 	getAxis(direction) {
-		return direction === UP || direction === DOWN ? VERTICAL : HORIZONTAL
+		return direction === DIRECTION.UP || direction === DIRECTION.DOWN
+			? AXIS.VERTICAL
+			: AXIS.HORIZONTAL
 	}
 
+
 	getDirectionEdges(direction) {
-		if (direction === RIGHT) return ['right', 'left', 'top', 'bottom', 'height']
-		if (direction === LEFT)  return ['left', 'right', 'top', 'bottom', 'height']
-		if (direction === DOWN)  return ['bottom', 'top', 'left', 'right', 'width']
-		if (direction === UP)    return ['top', 'bottom', 'left', 'right', 'width']
+		if (direction === DIRECTION.RIGHT) return EDGES.RIGHT
+		if (direction === DIRECTION.LEFT)  return EDGES.LEFT
+		if (direction === DIRECTION.DOWN)  return EDGES.DOWN
+		if (direction === DIRECTION.UP)    return EDGES.UP
 	}
 
 	filterByDirection(targets, source) {
 		const {direction} = this
-		if (direction === RIGHT) return targets.filter(target => target.left >= source.right)
-		if (direction === LEFT)  return targets.filter(target => target.right <= source.left)
-		if (direction === DOWN)  return targets.filter(target => target.top >= source.bottom)
-		if (direction === UP)    return targets.filter(target => target.bottom <= source.top)
+		if (direction === DIRECTION.RIGHT) return targets.filter(target => target.left >= source.right)
+		if (direction === DIRECTION.LEFT)  return targets.filter(target => target.right <= source.left)
+		if (direction === DIRECTION.DOWN)  return targets.filter(target => target.top >= source.bottom)
+		if (direction === DIRECTION.UP)    return targets.filter(target => target.bottom <= source.top)
 	}
 
 	filterByClosestParallel(targets, source) {
@@ -142,6 +160,7 @@ export class GridNav {
 
 	filterOverlaping(targets, source, history) {
 		const [, , lowerSide, upperSide, sizeKey] = this.directionEdges
+
 		let overlapingItems = targets.map(target => new Overlap(target, source, lowerSide, upperSide, sizeKey))
 
 		overlapingItems = overlapingItems.filter(target => target.overlapSelfSize > 0)
@@ -157,10 +176,6 @@ export class GridNav {
 		overlapingItems = sortAndGetHighest(overlapingItems, 'overlapCurrentSize')
 
 		return overlapingItems.length ? overlapingItems : targets
-	}
-
-	reset(direction) {
-		this.axisHistory = []
 	}
 
 }
