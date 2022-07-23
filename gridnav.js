@@ -78,16 +78,16 @@ export class GridNav {
 	axisHistory = []
 	lastAxis
 
-	findNext = (focusableNodes, currentNode, eventOrDirection) => {
+	findNode(candidateNodes, currentNode, eventOrDirection) {
 		this.setupDirectionAndAxis(eventOrDirection)
 
 		if (this.lastAxis && this.lastAxis !== this.axis) this.reset()
 
-		focusableNodes = new Set(focusableNodes)
-		focusableNodes.delete(currentNode)
+		candidateNodes = new Set(candidateNodes)
+		candidateNodes.delete(currentNode)
 
 		const source = NodePos.from(document.activeElement)
-		let targets = Array.from(focusableNodes).map(NodePos.from)
+		let targets = Array.from(candidateNodes).map(NodePos.from)
 
 		targets = this.filterByDirection(targets, source)
 
@@ -116,7 +116,7 @@ export class GridNav {
 		this.directionEdges = this.getDirectionEdges(this.direction)
 	}
 
-	translateKeyToDirection = e => {
+	translateKeyToDirection(e) {
 		switch (e.keyCode) {			
 			case KEY.LEFT:  return DIRECTION.LEFT
 			case KEY.RIGHT: return DIRECTION.RIGHT
@@ -179,3 +179,8 @@ export class GridNav {
 	}
 
 }
+
+export const gridNav = new GridNav
+
+export const findNode = gridNav.findNode.bind(gridNav)
+
