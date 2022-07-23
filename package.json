@@ -1,0 +1,26 @@
+{
+  "name": "gridnav",
+  "version": "1.0.0",
+  "description": "🧭 Spatial navigation with keyboard arrows.",
+  "main": "gridnav.js",
+  "keywords": [
+    "grid",
+    "spatial",
+    "navigation",
+    "dom",
+    "tabindex",
+    "element",
+    "focus",
+    "focusable",
+    "arrow",
+    "keyboard",
+    "events"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MikeKovarik/gridnav.git"
+  },
+  "author": "",
+  "license": "MIT",
+  "homepage": "https://github.com/MikeKovarik/gridnav#readme"
+}

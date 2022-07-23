@@ -98,7 +98,7 @@
 			const onKeyUp = e => {
 				if (!document.activeElement) return
 				if (!isArrowKey(e)) return
-				const focusableNodes = Array.from(document.querySelectorAll('[tabindex]'))
+				const focusableNodes = document.querySelectorAll('[tabindex]')
 				const currentNode = document.activeElement
 				const target = findNode(focusableNodes, currentNode, e)
 				if (!target) return
